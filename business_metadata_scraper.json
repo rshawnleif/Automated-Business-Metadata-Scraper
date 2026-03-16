@@ -1,0 +1,377 @@
+{
+    "name": "Business Metadata Scraper",
+    "nodes": [
+      {
+        "parameters": {
+          "formTitle": "Google Maps Scraper",
+          "formFields": {
+            "values": [
+              {
+                "fieldLabel": "BusinessAndLocation"
+              },
+              {
+                "fieldLabel": "FacebookLink"
+              },
+              {
+                "fieldLabel": "InstagramLink"
+              },
+              {
+                "fieldLabel": "Website"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.formTrigger",
+        "typeVersion": 2.5,
+        "position": [
+          -176,
+          224
+        ],
+        "id": "form-trigger-node",
+        "name": "On form submission",
+        "webhookId": "REMOVED_FOR_GITHUB"
+      },
+      {
+        "parameters": {
+          "operation": "appendOrUpdate",
+          "documentId": {
+            "__rl": true,
+            "value": "YOUR_SPREADSHEET_ID",
+            "mode": "id"
+          },
+          "sheetName": {
+            "__rl": true,
+            "value": "gid=0",
+            "mode": "list"
+          },
+          "columns": {
+            "mappingMode": "defineBelow",
+            "value": {
+              "Business Name": "={{ $json.title }}",
+              "Address": "={{ $json.address }}",
+              "Maps URL": "={{ $json.url }}",
+              "Star Rating": "={{ $json.totalScore }}",
+              "Total Reviews": "={{ $json.reviewsCount }}",
+              "Google Posts": "={{ $json.ownerUpdates.length || 0 }}",
+              "Owner Images": "={{ $json.combined_stats.images.owner_count }}",
+              "Review a week ago": "={{ $json.combined_stats.reviews.week1 }}",
+              "Customer Images": "={{ $json.combined_stats.images.customer_count }}",
+              "Review 2 weeks ago": "={{ $json.combined_stats.reviews.week2 }}",
+              "Review 3 weeks ago": "={{ $json.combined_stats.reviews.week3 }}",
+              "Review 4 weeks ago": "={{ $json.combined_stats.reviews.week4 }}",
+              "Review a month ago": "={{ $json.combined_stats.reviews.month_ago_label }}",
+              "Total Recent Reviews": "={{ $json.combined_stats.reviews.total_recent_reviews }}",
+              "NAP+W": "={{ $json.combined_stats.napw }}",
+              "All Fields": "={{ Object.values($json.additionalInfo).reduce((acc, category) => acc + (Array.isArray(category) ? category.length : 0), 0) }}",
+              "FB Week 1 Count": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.week1Count }}",
+              "FB Week 2 Count": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.week2Count }}",
+              "FB Week 3 Count": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.week3Count }}",
+              "FB Week 4 Count": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.week4Count }}",
+              "FB Followers": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.followers }}",
+              "FB Likes": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.averageLikes }}",
+              "FB Verified": "={{ $(\"Facebook Posts & Likes Extractor\").first().json.isVerified ? 1 : 0 }}",
+              "IG Week 1 Count": "={{ $(\"Instagram Posts & Likes Counter\").first().json.week1Count }}",
+              "IG Week 2 Count": "={{ $(\"Instagram Posts & Likes Counter\").first().json.week2Count }}",
+              "IG Week 3 Count": "={{ $(\"Instagram Posts & Likes Counter\").first().json.week3Count }}",
+              "IG Week 4 Count": "={{ $(\"Instagram Posts & Likes Counter\").first().json.week4Count }}",
+              "IG Followers": "={{ $(\"Instagram Posts & Likes Counter\").first().json.followers }}",
+              "IG Likes": "={{ $(\"Instagram Posts & Likes Counter\").first().json.averageLikes }}",
+              "IG Verified": "={{ $(\"Instagram Posts & Likes Counter\").first().json.isVerified ? 1 : 0 }}",
+              "SEO": "={{ $('Normalized WEB').first().json.seo }}",
+              "Performance": "={{ $('Normalized WEB').first().json.performance }}",
+              "Accessibility": "={{ $('Normalized WEB').first().json.accessibility }}",
+              "Best Practices": "={{ $('Normalized WEB').first().json['best-practices'] }}"
+            },
+            "matchingColumns": [
+              "Business Name"
+            ]
+          },
+          "options": {
+            "cellFormat": "USER_ENTERED"
+          }
+        },
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 4.7,
+        "position": [
+          1104,
+          240
+        ],
+        "id": "google-sheets-node",
+        "name": "Append or update row in sheet",
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "",
+            "name": "PLACEHOLDER_CREDENTIALS"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const now = new Date();\nconst oneDay = 24 * 60 * 60 * 1000; \n\nfor (const item of $input.all()) {\n  const data = item.json;\n  const reviews = data.reviews || [];\n  let week1 = 0, week2 = 0, week3 = 0, week4 = 0, aMonthAgo = 0;\n\n  reviews.forEach(review => {\n    if (!review.publishedAtDate) return;\n    const reviewDate = new Date(review.publishedAtDate);\n    const diffDays = Math.floor((now - reviewDate) / oneDay);\n    if (diffDays <= 7) week1++;\n    else if (diffDays <= 14) week2++;\n    else if (diffDays <= 21) week3++;\n    else if (diffDays <= 30) week4++;\n    else if (diffDays <= 60) aMonthAgo++;\n  });\n\n  const urls = data.imageUrls || [];\n  let ownerImgCount = 0;\n  let customerImgCount = 0;\n  urls.forEach(url => {\n    if (url.includes('/p/') || url.includes('/proxy/')) {\n      ownerImgCount++;\n    } else if (url.includes('/gps-cs-s/')) {\n      customerImgCount++;\n    }\n  });\n\n  const hasName = !!data.title;\n  const hasAddress = !!data.address;\n  const hasPhone = !!data.phone;\n  const hasWebsite = !!data.website;\n  const websiteStr = (data.website || \"\").toLowerCase();\n  const hasFB = websiteStr.includes('facebook.com');\n  const hasIG = websiteStr.includes('instagram.com');\n  const totalCategories = [hasName, hasAddress, hasPhone, hasWebsite, hasFB, hasIG].filter(Boolean).length;\n\n  item.json.combined_stats = {\n    reviews: {\n      week1, week2, week3, week4, month_ago_label: aMonthAgo,\n      total_recent_reviews: week1 + week2 + week3 + week4 + aMonthAgo\n    },\n    images: {\n      owner_count: ownerImgCount,\n      customer_count: customerImgCount,\n      total_images_scraped: urls.length\n    },\n    napw: totalCategories\n  };\n}\nreturn $input.all();"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          336,
+          32
+        ],
+        "id": "code-node-gbp",
+        "name": "Count Recency & Image Upload Categories Extraction"
+      },
+      {
+        "parameters": {
+          "operation": "Run actor and get dataset",
+          "actorSource": "store",
+          "actorId": "nwua9Gu5YrADL7ZDj",
+          "customBody": "={\n    \"searchStringsArray\": [\n        \"{{ $json.BusinessAndLocation }}\"\n    ],\n    \"maxCrawledPlacesPerSearch\": 1,\n    \"scrapePlaceDetailPage\": true,\n    \"includeReviews\": true,\n    \"reviewsSort\": \"newest\",\n    \"includeImages\": true,\n    \"includePosts\": true,\n    \"scrapeReviewsPersonalData\": true,\n    \"maxImages\": 100,\n    \"maxReviews\": 100,\n    \"language\": \"en\"\n}",
+          "timeout": 300,
+          "authentication": "apifyOAuth2Api"
+        },
+        "type": "@apify/n8n-nodes-apify.apify",
+        "typeVersion": 1,
+        "position": [
+          112,
+          32
+        ],
+        "id": "apify-gbp-node",
+        "name": "GBP Node",
+        "credentials": {
+          "apifyOAuth2Api": {
+            "id": "",
+            "name": "PLACEHOLDER_CREDENTIALS"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "Run actor and get dataset",
+          "actorSource": "store",
+          "actorId": "KoJrdxJCTtpon81KY",
+          "customBody": "={\n  \"captionText\": false,\n  \"onlyPostsNewerThan\": \"4 weeks\",\n  \"resultsLimit\": 30,\n  \"startUrls\": [\n    {\n      \"url\": \"{{ $node[\"On form submission\"].json.FacebookLink }}\"\n    }\n  ]\n}",
+          "timeout": 300,
+          "authentication": "apifyOAuth2Api"
+        },
+        "type": "@apify/n8n-nodes-apify.apify",
+        "typeVersion": 1,
+        "position": [
+          336,
+          224
+        ],
+        "id": "apify-fb-node",
+        "name": "Facebook Node",
+        "credentials": {
+          "apifyOAuth2Api": {
+            "id": "",
+            "name": "PLACEHOLDER_CREDENTIALS"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "Run actor and get dataset",
+          "actorSource": "store",
+          "actorId": "dSCLg0C3YEZ83HzYX",
+          "customBody": "={\n  \"usernames\": [\n    \"{{$json.InstagramLink.split('https://www.instagram.com/').pop().split(/[/?]/)[0]}}\"\n  ],\n  \"resultsLimit\": 50\n}",
+          "timeout": 300,
+          "authentication": "apifyOAuth2Api"
+        },
+        "type": "@apify/n8n-nodes-apify.apify",
+        "typeVersion": 1,
+        "position": [
+          112,
+          416
+        ],
+        "id": "apify-ig-node",
+        "name": "Instagram Node",
+        "credentials": {
+          "apifyOAuth2Api": {
+            "id": "",
+            "name": "PLACEHOLDER_CREDENTIALS"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst now = new Date();\nconst fourWeeksAgo = new Date(now);\nfourWeeksAgo.setDate(now.getDate() - 28);\nfunction getWeekNumber(postDate) {\n  const daysAgo = (now - postDate) / (1000 * 60 * 60 * 24);\n  if (daysAgo <= 7) return 1;\n  if (daysAgo <= 14) return 2;\n  if (daysAgo <= 21) return 3;\n  return 4;\n}\nfunction getTimeWeight(week) {\n  const weights = { 1: 1.00, 2: 0.75, 3: 0.50, 4: 0.25 };\n  return weights[week];\n}\nconst pageData = items[0]?.json || {};\nconst followers = pageData.followersCount || 0;\nconst isVerified = pageData.verified || false;\nconst allPosts = items.flatMap(item => item.json.latestPosts || []);\nconst filteredPosts = allPosts.filter(post => {\n  const postDate = new Date(post.timestamp);\n  return postDate >= fourWeeksAgo && postDate <= now;\n});\nconst weeks = { 1: [], 2: [], 3: [], 4: [] };\nfilteredPosts.forEach(post => {\n  const postDate = new Date(post.timestamp);\n  const week = getWeekNumber(postDate);\n  const likes = post.likesCount || 0;\n  weeks[week].push(likes);\n});\nconst weekStats = {};\n[1, 2, 3, 4].forEach(w => {\n  const count = weeks[w].length;\n  const weight = getTimeWeight(w);\n  const weightedCount = count * weight;\n  const rawLikesSum = weeks[w].reduce((sum, l) => sum + l, 0);\n  const avgLikes = count > 0 ? Math.round((rawLikesSum / count) * 100) / 100 : 0;\n  weekStats[`week${w}Count`] = count;\n  weekStats[`week${w}Weight`] = weight;\n  weekStats[`week${w}WeightedCount`] = Math.round(weightedCount * 100) / 100;\n  weekStats[`week${w}TotalLikes`] = rawLikesSum;\n  weekStats[`week${w}AverageLikes`] = avgLikes;\n});\nconst totalPosts = filteredPosts.length;\nconst totalLikes = filteredPosts.reduce((sum, post) => sum + (post.likesCount || 0), 0);\nconst averageLikes = totalPosts > 0 ? Math.round((totalLikes / totalPosts) * 100) / 100 : 0;\nconst totalWeightedCount = [1, 2, 3, 4].reduce((sum, w) => sum + weekStats[`week${w}WeightedCount`], 0);\nreturn [{ json: { ...weekStats, totalPostsInRange: totalPosts, totalWeightedCount: Math.round(totalWeightedCount * 100) / 100, totalLikes, averageLikes, followers, isVerified, rangeStart: fourWeeksAgo.toISOString().split('T')[0], rangeEnd: now.toISOString().split('T')[0] } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          336,
+          416
+        ],
+        "id": "code-node-ig",
+        "name": "Instagram Posts & Likes Counter"
+      },
+      {
+        "parameters": {
+          "operation": "Run actor and get dataset",
+          "actorSource": "store",
+          "actorId": "4Hv5RhChiaDk6iwad",
+          "customBody": "={\n    \"startUrls\": [\n        {\n            \"url\": \"{{ $node[\"On form submission\"].json.FacebookLink}}\"\n        }\n    ]\n}",
+          "authentication": "apifyOAuth2Api"
+        },
+        "type": "@apify/n8n-nodes-apify.apify",
+        "typeVersion": 1,
+        "position": [
+          112,
+          224
+        ],
+        "id": "apify-fb-followers",
+        "name": "Followers Extracter",
+        "credentials": {
+          "apifyOAuth2Api": {
+            "id": "",
+            "name": "PLACEHOLDER_CREDENTIALS"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const posts = $input.all();\nconst now = new Date();\nconst fourWeeksAgo = new Date(now);\nfourWeeksAgo.setDate(now.getDate() - 28);\nfunction getWeekNumber(postDate) {\n  const daysAgo = (now - postDate) / (1000 * 60 * 60 * 24);\n  if (daysAgo <= 7) return 1;\n  if (daysAgo <= 14) return 2;\n  if (daysAgo <= 21) return 3;\n  return 4;\n}\nfunction getTimeWeight(week) {\n  const weights = { 1: 1.00, 2: 0.75, 3: 0.50, 4: 0.25 };\n  return weights[week];\n}\nconst pageData = $(\"Followers Extracter\").first().json || {};\nconst followers = pageData.followers || pageData.followersCount || 0;\nconst pageLikes = pageData.likes || pageData.pagelikes || 0;\nconst isVerified = pageData.verified || pageData.isVerified || false;\nconst engagementWeight = (followers + pageLikes) / 10000;\nconst verifiedWeight = isVerified ? 1 : 0;\nconst filteredPosts = posts.filter(post => {\n  const postDate = new Date(post.json.time);\n  return postDate >= fourWeeksAgo && postDate <= now;\n});\nconst weeks = { 1: [], 2: [], 3: [], 4: [] };\nfilteredPosts.forEach(post => {\n  const postDate = new Date(post.json.time);\n  const week = getWeekNumber(postDate);\n  const likes = post.json.likes || 0;\n  weeks[week].push(likes);\n});\nconst weekStats = {};\n[1, 2, 3, 4].forEach(w => {\n  const count = weeks[w].length;\n  const weight = getTimeWeight(w);\n  const weightedCount = count * weight;\n  const rawLikesSum = weeks[w].reduce((sum, l) => sum + l, 0);\n  const avgLikes = count > 0 ? Math.round((rawLikesSum / count) * 100) / 100 : 0;\n  weekStats[`week${w}Count`] = count;\n  weekStats[`week${w}Weight`] = weight;\n  weekStats[`week${w}WeightedCount`] = Math.round(weightedCount * 100) / 100;\n  weekStats[`week${w}TotalLikes`] = rawLikesSum;\n  weekStats[`week${w}AverageLikes`] = avgLikes;\n});\nconst totalPosts = filteredPosts.length;\nconst totalLikes = filteredPosts.reduce((sum, post) => sum + (post.json.likes || 0), 0);\nconst averageLikes = totalPosts > 0 ? Math.round((totalLikes / totalPosts) * 100) / 100 : 0;\nconst totalWeightedCount = [1, 2, 3, 4].reduce((sum, w) => sum + weekStats[`week${w}WeightedCount`], 0);\nreturn [{ json: { ...weekStats, totalPostsInRange: totalPosts, totalWeightedCount: Math.round(totalWeightedCount * 100) / 100, totalLikes, averageLikes, followers, pageLikes, engagementWeight: Math.round(engagementWeight * 10000) / 10000, verifiedWeight, isVerified, rangeStart: fourWeeksAgo.toISOString().split('T')[0], rangeEnd: now.toISOString().split('T')[0] } }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          544,
+          224
+        ],
+        "id": "code-node-fb",
+        "name": "Facebook Posts & Likes Extractor"
+      },
+      {
+        "parameters": {
+          "numberInputs": 4
+        },
+        "type": "n8n-nodes-base.merge",
+        "typeVersion": 3.2,
+        "position": [
+          880,
+          208
+        ],
+        "id": "merge-node",
+        "name": "Merge1"
+      },
+      {
+        "parameters": {
+          "url": "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?category=performance&category=accessibility&category=best-practices&category=seo",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "url",
+                "value": "={{ $json.Website }}"
+              },
+              {
+                "name": "key",
+                "value": "YOUR_GOOGLE_API_KEY"
+              },
+              {
+                "name": "strategy",
+                "value": "desktop"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.4,
+        "position": [
+          112,
+          624
+        ],
+        "id": "http-web-node",
+        "name": "WEB"
+      },
+      {
+        "parameters": {
+          "assignments": {
+            "assignments": [
+              {
+                "id": "seo-mapping",
+                "name": "seo",
+                "value": "={{ $json.lighthouseResult.categories.seo.score * 100 }}",
+                "type": "string"
+              },
+              {
+                "id": "perf-mapping",
+                "name": "performance",
+                "value": "={{ $json.lighthouseResult.categories.performance.score * 100 }}",
+                "type": "string"
+              },
+              {
+                "id": "access-mapping",
+                "name": "accessibility",
+                "value": "={{ $json.lighthouseResult.categories.accessibility.score * 100 }}",
+                "type": "string"
+              },
+              {
+                "id": "bp-mapping",
+                "name": "best-practices",
+                "value": "={{ $json.lighthouseResult.categories['best-practices'].score * 100 }}",
+                "type": "string"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 3.4,
+        "position": [
+          320,
+          624
+        ],
+        "id": "set-web-node",
+        "name": "Normalized WEB"
+      }
+    ],
+    "connections": {
+      "On form submission": {
+        "main": [
+          [
+            { "node": "GBP Node", "type": "main", "index": 0 },
+            { "node": "Instagram Node", "type": "main", "index": 0 },
+            { "node": "Followers Extracter", "type": "main", "index": 0 },
+            { "node": "WEB", "type": "main", "index": 0 }
+          ]
+        ]
+      },
+      "Count Recency & Image Upload Categories Extraction": {
+        "main": [[{ "node": "Merge1", "type": "main", "index": 0 }]]
+      },
+      "GBP Node": {
+        "main": [[{ "node": "Count Recency & Image Upload Categories Extraction", "type": "main", "index": 0 }]]
+      },
+      "Instagram Node": {
+        "main": [[{ "node": "Instagram Posts & Likes Counter", "type": "main", "index": 0 }]]
+      },
+      "Facebook Node": {
+        "main": [[{ "node": "Facebook Posts & Likes Extractor", "type": "main", "index": 0 }]]
+      },
+      "Instagram Posts & Likes Counter": {
+        "main": [[{ "node": "Merge1", "type": "main", "index": 2 }]]
+      },
+      "Followers Extracter": {
+        "main": [[{ "node": "Facebook Node", "type": "main", "index": 0 }]]
+      },
+      "Facebook Posts & Likes Extractor": {
+        "main": [[{ "node": "Merge1", "type": "main", "index": 1 }]]
+      },
+      "Merge1": {
+        "main": [[{ "node": "Append or update row in sheet", "type": "main", "index": 0 }]]
+      },
+      "WEB": {
+        "main": [[{ "node": "Normalized WEB", "type": "main", "index": 0 }]]
+      },
+      "Normalized WEB": {
+        "main": [[{ "node": "Merge1", "type": "main", "index": 3 }]]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "meta": {
+      "templateCredsSetupCompleted": true
+    }
+  }
